@@ -1,4 +1,4 @@
-use std::error::Error;
+use anyhow::Result;
 use wgpu_glyph::{ab_glyph, GlyphBrushBuilder, Section, Text};
 use winit::{
     event::{DeviceEvent, ElementState, Event, KeyboardInput},
@@ -7,7 +7,7 @@ use winit::{
     window::WindowBuilder,
 };
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<()> {
     env_logger::init();
     let event_loop = EventLoop::new();
 
