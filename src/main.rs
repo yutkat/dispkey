@@ -1,4 +1,8 @@
+mod keylogs;
+
+use crate::keylogs::KeyLogs;
 use anyhow::Result;
+use log::debug;
 use wgpu_glyph::{ab_glyph, GlyphBrushBuilder, Section, Text};
 use winit::{
     event::{DeviceEvent, ElementState, Event, KeyboardInput},
@@ -8,7 +12,7 @@ use winit::{
 };
 
 fn main() -> Result<()> {
-    env_logger::init();
+    pretty_env_logger::init();
     let event_loop = EventLoop::new();
 
     let window = WindowBuilder::new()
@@ -69,6 +73,9 @@ fn main() -> Result<()> {
     // Render loop
     window.request_redraw();
 
+    let mut keys = KeyLogs::new();
+    let mut last_frame_time = std::time::Instant::now();
+
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
         match event {
@@ -102,18 +109,30 @@ fn main() -> Result<()> {
                     }),
                 ..
             } => {
-                println!("press {:?}", key);
+                debug!("press {:?}", key);
+                keys.push(format!("{:?}\n", key));
                 glyph_brush.queue(Section {
-                    screen_position: (30.0, 30.0),
+                    screen_position: (30.0, 10.0),
                     bounds: (size.width as f32, size.height as f32),
-                    text: vec![Text::new(&format!("{:?}", key))
-                        .with_color([0.0, 0.0, 0.0, 1.0])
-                        .with_scale(40.0)],
+                    text: keys
+                        .get_keys()
+                        .iter()
+                        .map(|x| {
+                            Text::new(&x)
+                                .with_color([0.0, 0.0, 0.0, 1.0])
+                                .with_scale(30.0)
+                        })
+                        .collect(),
                     ..Section::default()
                 });
                 window.request_redraw();
             }
-            Event::MainEventsCleared => {}
+            Event::MainEventsCleared => {
+                if std::time::Instant::now() - last_frame_time >= std::time::Duration::from_secs(1)
+                {
+                    window.request_redraw();
+                }
+            }
             Event::RedrawRequested { .. } => {
                 // Get a command encoder for the current frame
                 let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -148,6 +167,8 @@ fn main() -> Result<()> {
                     .expect("Draw queued");
 
                 queue.submit(&[encoder.finish()]);
+
+                last_frame_time = std::time::Instant::now();
             }
             _ => (),
         }
