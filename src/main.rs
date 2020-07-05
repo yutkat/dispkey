@@ -77,7 +77,7 @@ fn main() -> Result<()> {
     let mut last_frame_time = std::time::Instant::now();
 
     event_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Wait;
+        *control_flow = ControlFlow::Poll;
         match event {
             Event::WindowEvent {
                 event: winit::event::WindowEvent::CloseRequested,
@@ -130,10 +130,12 @@ fn main() -> Result<()> {
             Event::MainEventsCleared => {
                 if std::time::Instant::now() - last_frame_time >= std::time::Duration::from_secs(1)
                 {
+                    keys.refresh();
                     window.request_redraw();
                 }
             }
             Event::RedrawRequested { .. } => {
+                println!("Redraw");
                 // Get a command encoder for the current frame
                 let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("Redraw"),

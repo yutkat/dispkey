@@ -33,6 +33,13 @@ impl KeyLogs {
         })
     }
 
+    pub fn refresh(&mut self) {
+        self.keylogs.retain(|x| {
+            chrono::offset::Utc::now().naive_utc().timestamp() - x.input_datetime.timestamp() <= 1
+        });
+        println!("{:?}", self.keylogs);
+    }
+
     pub fn get_keys(&self) -> Vec<String> {
         self.keylogs.iter().map(|k| k.key.clone()).collect()
     }
