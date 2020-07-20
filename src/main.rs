@@ -111,11 +111,16 @@ fn main() -> Result<()> {
             } => {
                 debug!("press {:?}", key);
                 keys.push(format!("{:?}\n", key));
+                window.request_redraw();
+            }
+            Event::MainEventsCleared => {}
+            Event::RedrawRequested { .. } => {
+                println!("Redraw");
                 glyph_brush.queue(Section {
                     screen_position: (30.0, 10.0),
                     bounds: (size.width as f32, size.height as f32),
                     text: keys
-                        .get_keys()
+                        .get_keys_from_last(4)
                         .iter()
                         .map(|x| {
                             Text::new(&x)
@@ -125,17 +130,6 @@ fn main() -> Result<()> {
                         .collect(),
                     ..Section::default()
                 });
-                window.request_redraw();
-            }
-            Event::MainEventsCleared => {
-                if std::time::Instant::now() - last_frame_time >= std::time::Duration::from_secs(1)
-                {
-                    keys.refresh();
-                    window.request_redraw();
-                }
-            }
-            Event::RedrawRequested { .. } => {
-                println!("Redraw");
                 // Get a command encoder for the current frame
                 let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("Redraw"),
@@ -173,6 +167,9 @@ fn main() -> Result<()> {
                 last_frame_time = std::time::Instant::now();
             }
             _ => (),
+        }
+        if std::time::Instant::now() - last_frame_time >= std::time::Duration::from_secs(1) {
+            window.request_redraw();
         }
     });
 }
