@@ -110,7 +110,7 @@ fn main() -> Result<()> {
                 ..
             } => {
                 debug!("press {:?}", key);
-                keys.push(format!("{:?}\n", key));
+                keys.push(format!("{:?}", key));
                 window.request_redraw();
             }
             Event::MainEventsCleared => {}
@@ -123,10 +123,16 @@ fn main() -> Result<()> {
                         .get_keys_from_last(4)
                         .iter()
                         .map(|x| {
-                            Text::new(&x)
-                                .with_color([0.0, 0.0, 0.0, 1.0])
-                                .with_scale(30.0)
+                            vec![
+                                Text::new(&x)
+                                    .with_color([0.0, 0.0, 0.0, 1.0])
+                                    .with_scale(30.0),
+                                Text::new("\n")
+                                    .with_color([0.0, 0.0, 0.0, 1.0])
+                                    .with_scale(30.0),
+                            ]
                         })
+                        .flatten()
                         .collect(),
                     ..Section::default()
                 });

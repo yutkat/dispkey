@@ -21,13 +21,28 @@ impl KeyLogs {
     pub fn push<S: Into<String>>(&mut self, key: S) {
         self.refresh();
 
-        // if self.keylogs.len() >= 4 {
-        //     self.keylogs.remove(0);
-        // }
-        self.keylogs.push(KeyLog {
-            key: key.into(),
-            input_datetime: chrono::offset::Utc::now().naive_utc(),
-        })
+        if chrono::offset::Utc::now().naive_utc().timestamp_millis()
+            - self
+                .keylogs
+                .last()
+                .unwrap_or(&KeyLog {
+                    key: "".to_string(),
+                    input_datetime: chrono::NaiveDateTime::from_timestamp(0, 0),
+                })
+                .input_datetime
+                .timestamp_millis()
+            <= 500
+        {
+            *self.keylogs.last_mut().unwrap() = KeyLog {
+                key: format!("{}{}", self.keylogs.last().unwrap().key, key.into()),
+                input_datetime: chrono::offset::Utc::now().naive_utc(),
+            };
+        } else {
+            self.keylogs.push(KeyLog {
+                key: key.into(),
+                input_datetime: chrono::offset::Utc::now().naive_utc(),
+            })
+        }
     }
 
     pub fn refresh(&mut self) {
