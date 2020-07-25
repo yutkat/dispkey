@@ -1,5 +1,10 @@
-use std::error::Error;
-use wgpu_glyph::{ab_glyph, GlyphBrushBuilder, Section, Text};
+mod key_converter;
+mod keylogs;
+
+use crate::keylogs::KeyLogs;
+use anyhow::Result;
+use log::{debug, info};
+use wgpu_glyph::{ab_glyph, GlyphBrushBuilder, HorizontalAlign, Layout, Section, Text};
 use winit::{
     event::{DeviceEvent, ElementState, Event, KeyboardInput},
     event_loop::{ControlFlow, EventLoop},
@@ -7,8 +12,8 @@ use winit::{
     window::WindowBuilder,
 };
 
-fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
+fn main() -> Result<()> {
+    pretty_env_logger::init();
     let event_loop = EventLoop::new();
 
     let window = WindowBuilder::new()
@@ -21,6 +26,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .with_x11_window_type(vec![XWindowType::Utility])
         .build(&event_loop)
         .unwrap();
+    // window.set_outer_position(winit::dpi::PhysicalPosition::new(3300, 900));
 
     let surface = wgpu::Surface::create(&window);
 
@@ -69,8 +75,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Render loop
     window.request_redraw();
 
+    let mut keys = KeyLogs::new();
+    let mut last_frame_time = std::time::Instant::now();
+
+    #[allow(deprecated)]
     event_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Wait;
+        *control_flow = ControlFlow::Poll;
         match event {
             Event::WindowEvent {
                 event: winit::event::WindowEvent::CloseRequested,
@@ -98,23 +108,47 @@ fn main() -> Result<(), Box<dyn Error>> {
                     DeviceEvent::Key(KeyboardInput {
                         virtual_keycode: Some(key),
                         state: ElementState::Pressed,
+                        modifiers: modifiers_state,
                         ..
                     }),
                 ..
             } => {
-                println!("press {:?}", key);
-                glyph_brush.queue(Section {
-                    screen_position: (30.0, 30.0),
-                    bounds: (size.width as f32, size.height as f32),
-                    text: vec![Text::new(&format!("{:?}", key))
-                        .with_color([0.0, 0.0, 0.0, 1.0])
-                        .with_scale(40.0)],
-                    ..Section::default()
-                });
-                window.request_redraw();
+                info!("press {:?}", key);
+                let conv_key = key_converter::convert(key, modifiers_state);
+                if !conv_key.is_empty() {
+                    keys.push(format!("{}", conv_key));
+                    window.request_redraw();
+                }
+            }
+            Event::DeviceEvent {
+                event: DeviceEvent::Text { codepoint: text },
+                ..
+            } => {
+                println!("codetext {:?}", text);
             }
             Event::MainEventsCleared => {}
             Event::RedrawRequested { .. } => {
+                glyph_brush.queue(Section {
+                    screen_position: (150.0, 10.0),
+                    bounds: (size.width as f32, size.height as f32),
+                    text: keys
+                        .get_keys_from_last(4)
+                        .iter()
+                        .map(|x| {
+                            vec![
+                                Text::new(&x)
+                                    .with_color([0.0, 0.0, 0.0, 1.0])
+                                    .with_scale(30.0),
+                                Text::new("\n")
+                                    .with_color([0.0, 0.0, 0.0, 1.0])
+                                    .with_scale(30.0),
+                            ]
+                        })
+                        .flatten()
+                        .collect(),
+                    layout: Layout::default().h_align(HorizontalAlign::Right),
+                    ..Section::default()
+                });
                 // Get a command encoder for the current frame
                 let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("Redraw"),
@@ -135,7 +169,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 r: 0.4,
                                 g: 0.4,
                                 b: 0.4,
-                                a: 1.0,
+                                a: 0.0,
                             },
                         }],
                         depth_stencil_attachment: None,
@@ -148,8 +182,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .expect("Draw queued");
 
                 queue.submit(&[encoder.finish()]);
+
+                last_frame_time = std::time::Instant::now();
             }
             _ => (),
+        }
+        if std::time::Instant::now() - last_frame_time >= std::time::Duration::from_secs(1) {
+            window.request_redraw();
         }
     });
 }
