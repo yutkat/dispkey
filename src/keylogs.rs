@@ -31,7 +31,7 @@ impl KeyLogs {
                 })
                 .input_datetime
                 .timestamp_millis()
-            <= 500
+            <= 800
         {
             *self.keylogs.last_mut().unwrap() = KeyLog {
                 key: format!("{}{}", self.keylogs.last().unwrap().key, key.into()),
@@ -49,7 +49,6 @@ impl KeyLogs {
         self.keylogs.retain(|x| {
             chrono::offset::Utc::now().naive_utc().timestamp() - x.input_datetime.timestamp() <= 2
         });
-        println!("{:?}", self.keylogs);
     }
 
     pub fn get_keys(&mut self) -> Vec<String> {
@@ -66,5 +65,27 @@ impl KeyLogs {
             .iter()
             .map(|k| k.key.clone())
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_push() {
+        let mut keys = KeyLogs::new();
+        let now = chrono::offset::Utc::now().naive_utc();
+        keys.push("a");
+        assert_eq!(keys.keylogs[0].key, "a");
+        assert!(keys.keylogs[0].input_datetime.timestamp() >= now.timestamp());
+    }
+
+    #[test]
+    fn test_push_multi() {
+        let mut keys = KeyLogs::new();
+        keys.push("a");
+        keys.push("b");
+        assert_eq!(keys.keylogs[0].key, "ab");
     }
 }
