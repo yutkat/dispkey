@@ -16,3 +16,4 @@ futures = "0.3"
 anyhow = "1.0.31"
 chrono = "0.4.11"
 time = "0.2.16"
+clap =  {version = "2", features = ["yaml"]}

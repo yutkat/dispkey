@@ -3,8 +3,11 @@ mod keylogs;
 
 use crate::keylogs::KeyLogs;
 use anyhow::Result;
-use log::{debug, info};
-use wgpu_glyph::{ab_glyph, GlyphBrushBuilder, HorizontalAlign, Layout, Section, Text};
+use clap::{load_yaml, App};
+use log::{debug, error, info};
+use wgpu_glyph::{
+    ab_glyph, GlyphBrushBuilder, HorizontalAlign, Layout, Section, Text, VerticalAlign,
+};
 use winit::{
     event::{DeviceEvent, ElementState, Event, KeyboardInput},
     event_loop::{ControlFlow, EventLoop},
@@ -16,6 +19,9 @@ fn main() -> Result<()> {
     pretty_env_logger::init();
     let event_loop = EventLoop::new();
 
+    let yaml = load_yaml!("cli.yml");
+    let matches = App::from_yaml(yaml).get_matches();
+
     let window = WindowBuilder::new()
         .with_transparent(true)
         .with_visible(true)
@@ -26,8 +32,17 @@ fn main() -> Result<()> {
         .with_x11_window_type(vec![XWindowType::Utility])
         .build(&event_loop)
         .unwrap();
-    // window.set_outer_position(winit::dpi::PhysicalPosition::new(3300, 900));
 
+    if let Some(value) = matches.value_of("position") {
+        let v: Vec<&str> = value.split('x').collect();
+        if v.len() != 2 {
+            error!("Invalid argument [--pos]");
+        }
+        let x: i32 = v[0].parse()?;
+        let y: i32 = v[1].parse()?;
+
+        window.set_outer_position(winit::dpi::PhysicalPosition::new(x, y));
+    }
     let surface = wgpu::Surface::create(&window);
 
     // Initialize GPU
@@ -120,16 +135,10 @@ fn main() -> Result<()> {
                     window.request_redraw();
                 }
             }
-            Event::DeviceEvent {
-                event: DeviceEvent::Text { codepoint: text },
-                ..
-            } => {
-                println!("codetext {:?}", text);
-            }
             Event::MainEventsCleared => {}
             Event::RedrawRequested { .. } => {
                 glyph_brush.queue(Section {
-                    screen_position: (150.0, 10.0),
+                    screen_position: (250.0, 120.0),
                     bounds: (size.width as f32, size.height as f32),
                     text: keys
                         .get_keys_from_last(4)
@@ -137,16 +146,18 @@ fn main() -> Result<()> {
                         .map(|x| {
                             vec![
                                 Text::new(&x)
-                                    .with_color([0.0, 0.0, 0.0, 1.0])
+                                    .with_color([1.0, 1.0, 1.0, 0.5])
                                     .with_scale(30.0),
                                 Text::new("\n")
-                                    .with_color([0.0, 0.0, 0.0, 1.0])
+                                    .with_color([1.0, 1.0, 1.0, 0.5])
                                     .with_scale(30.0),
                             ]
                         })
                         .flatten()
                         .collect(),
-                    layout: Layout::default().h_align(HorizontalAlign::Right),
+                    layout: Layout::default()
+                        .h_align(HorizontalAlign::Right)
+                        .v_align(VerticalAlign::Bottom),
                     ..Section::default()
                 });
                 // Get a command encoder for the current frame
@@ -166,9 +177,9 @@ fn main() -> Result<()> {
                             load_op: wgpu::LoadOp::Clear,
                             store_op: wgpu::StoreOp::Store,
                             clear_color: wgpu::Color {
-                                r: 0.4,
-                                g: 0.4,
-                                b: 0.4,
+                                r: 0.1,
+                                g: 0.1,
+                                b: 0.1,
                                 a: 0.0,
                             },
                         }],

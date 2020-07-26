@@ -1,0 +1,15 @@
+name: dispkey
+version: "0.0"
+author: Yuta Katayama
+about: Display your inputted keys like 'screenkey'
+args:
+    - position:
+        short: p
+        long: pos
+        value_name: "<x>x<y>"
+        help: Sets a display position
+        takes_value: true
+    - verbose:
+        short: v
+        multiple: true
+        help: Sets the level of verbosity
