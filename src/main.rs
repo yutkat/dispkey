@@ -12,7 +12,7 @@ use winit::{
     event::{DeviceEvent, ElementState, Event, KeyboardInput},
     event_loop::{ControlFlow, EventLoop},
     platform::unix::{WindowBuilderExtUnix, XWindowType},
-    window::WindowBuilder,
+    window::{CursorIcon, WindowBuilder},
 };
 
 fn main() -> Result<()> {
@@ -93,6 +93,8 @@ fn main() -> Result<()> {
     let mut keys = KeyLogs::new();
     let mut last_frame_time = std::time::Instant::now();
 
+    let mut cursor_state = CursorIcon::Default;
+
     #[allow(deprecated)]
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -117,6 +119,48 @@ fn main() -> Result<()> {
                         present_mode: wgpu::PresentMode::Mailbox,
                     },
                 );
+            }
+            // Event::WindowEvent {
+            //     event: winit::event::WindowEvent::CursorMoved { position: pos, .. },
+            //     ..
+            // } => {
+            //     if cursor_state == CursorIcon::Move {
+            //         window.set_outer_position(pos);
+            //     }
+            // }
+            Event::WindowEvent {
+                event:
+                    winit::event::WindowEvent::MouseInput {
+                        state: ElementState::Pressed,
+                        ..
+                    },
+                ..
+            } => {
+                window.set_cursor_icon(CursorIcon::Move);
+                cursor_state = CursorIcon::Move;
+            }
+            Event::WindowEvent {
+                event:
+                    winit::event::WindowEvent::MouseInput {
+                        state: ElementState::Released,
+                        ..
+                    },
+                ..
+            } => {
+                window.set_cursor_icon(CursorIcon::Default);
+                cursor_state = CursorIcon::Default;
+            }
+            Event::DeviceEvent {
+                event: DeviceEvent::MouseMotion { delta },
+                ..
+            } => {
+                if cursor_state == CursorIcon::Move {
+                    let p = window.outer_position().unwrap();
+                    window.set_outer_position(winit::dpi::PhysicalPosition::new(
+                        p.x + delta.0 as i32,
+                        p.y + delta.1 as i32,
+                    ));
+                }
             }
             Event::DeviceEvent {
                 event:
@@ -146,10 +190,10 @@ fn main() -> Result<()> {
                         .map(|x| {
                             vec![
                                 Text::new(&x)
-                                    .with_color([1.0, 1.0, 1.0, 0.5])
+                                    .with_color([1.0, 1.0, 1.0, 0.1])
                                     .with_scale(30.0),
                                 Text::new("\n")
-                                    .with_color([1.0, 1.0, 1.0, 0.5])
+                                    .with_color([1.0, 1.0, 1.0, 0.1])
                                     .with_scale(30.0),
                             ]
                         })
