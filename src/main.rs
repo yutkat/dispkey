@@ -4,34 +4,64 @@ mod keylogs;
 use crate::keylogs::KeyLogs;
 use anyhow::Result;
 use clap::{load_yaml, App};
-use log::{debug, error, info};
-use wgpu_glyph::{
-    ab_glyph, GlyphBrushBuilder, HorizontalAlign, Layout, Section, Text, VerticalAlign,
+use gfx::{
+    format::{Depth, Srgba8},
+    Device,
 };
-use winit::{
-    event::{DeviceEvent, ElementState, Event, KeyboardInput},
-    event_loop::{ControlFlow, EventLoop},
+use gfx_glyph::{ab_glyph::*, *};
+use glutin::{
+    event::{DeviceEvent, ElementState, Event, KeyboardInput, WindowEvent},
+    event_loop::ControlFlow,
     platform::unix::{WindowBuilderExtUnix, XWindowType},
-    window::{CursorIcon, WindowBuilder},
+    window::CursorIcon,
 };
+use log::{error, info};
+use old_school_gfx_glutin_ext::*;
+use std::env;
 
 fn main() -> Result<()> {
+    if env::var("RUST_LOG").is_err() {
+        env::set_var("RUST_LOG", "gfx_glyph=warn");
+    }
+
     pretty_env_logger::init();
-    let event_loop = EventLoop::new();
+
+    if cfg!(target_os = "linux") {
+        // winit wayland is currently still wip
+        if env::var("WINIT_UNIX_BACKEND").is_err() {
+            env::set_var("WINIT_UNIX_BACKEND", "x11");
+        }
+        // disables vsync sometimes on x11
+        if env::var("vblank_mode").is_err() {
+            env::set_var("vblank_mode", "0");
+        }
+    }
+
+    if cfg!(debug_assertions) && env::var("yes_i_really_want_debug_mode").is_err() {
+        eprintln!(
+            "Note: Release mode will improve performance greatly.\n    \
+             e.g. use `cargo run --example depth --release`"
+        );
+    }
 
     let yaml = load_yaml!("cli.yml");
     let matches = App::from_yaml(yaml).get_matches();
 
-    let window = WindowBuilder::new()
+    let event_loop = glutin::event_loop::EventLoop::new();
+    let window = glutin::window::WindowBuilder::new()
         .with_transparent(true)
         .with_visible(true)
         .with_decorations(false)
         .with_always_on_top(true)
         .with_resizable(true)
-        .with_inner_size(winit::dpi::LogicalSize::new(256.0, 128.0))
-        .with_x11_window_type(vec![XWindowType::Utility])
-        .build(&event_loop)
-        .unwrap();
+        .with_inner_size(glutin::dpi::LogicalSize::new(256.0, 128.0))
+        .with_x11_window_type(vec![XWindowType::Utility]);
+
+    let (window_ctx, mut device, mut factory, mut main_color, mut main_depth) =
+        glutin::ContextBuilder::new()
+            .with_gfx_color_depth::<Srgba8, Depth>()
+            .build_windowed(window, &event_loop)?
+            .init_gfx::<Srgba8, Depth>();
 
     if let Some(value) = matches.value_of("position") {
         let v: Vec<&str> = value.split('x').collect();
@@ -41,58 +71,27 @@ fn main() -> Result<()> {
         let x: i32 = v[0].parse()?;
         let y: i32 = v[1].parse()?;
 
-        window.set_outer_position(winit::dpi::PhysicalPosition::new(x, y));
+        window_ctx
+            .window()
+            .set_outer_position(glutin::dpi::LogicalPosition::new(x, y));
     }
-    let surface = wgpu::Surface::create(&window);
 
-    // Initialize GPU
-    let (device, queue) = futures::executor::block_on(async {
-        let adapter = wgpu::Adapter::request(
-            &wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
-                compatible_surface: Some(&surface),
-            },
-            wgpu::BackendBit::all(),
-        )
-        .await
-        .expect("Request adapter");
+    let fonts = vec![FontArc::try_from_slice(include_bytes!(
+        "Inconsolata-Regular.ttf"
+    ))?];
 
-        adapter
-            .request_device(&wgpu::DeviceDescriptor {
-                extensions: wgpu::Extensions {
-                    anisotropic_filtering: false,
-                },
-                limits: wgpu::Limits { max_bind_groups: 1 },
-            })
-            .await
-    });
+    let mut glyph_brush = GlyphBrushBuilder::using_fonts(fonts)
+        .initial_cache_size((512, 512))
+        .build(factory.clone());
 
-    // Prepare swap chain
-    let render_format = wgpu::TextureFormat::Bgra8UnormSrgb;
-    let mut size = window.inner_size();
-
-    let mut swap_chain = device.create_swap_chain(
-        &surface,
-        &wgpu::SwapChainDescriptor {
-            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
-            format: render_format,
-            width: size.width,
-            height: size.height,
-            present_mode: wgpu::PresentMode::Mailbox,
-        },
-    );
-
-    // Prepare glyph_brush
-    let inconsolata = ab_glyph::FontArc::try_from_slice(include_bytes!("Inconsolata-Regular.ttf"))?;
-
-    let mut glyph_brush = GlyphBrushBuilder::using_font(inconsolata).build(&device, render_format);
+    let mut encoder: gfx::Encoder<_, _> = factory.create_command_buffer().into();
 
     // Render loop
-    window.request_redraw();
+    window_ctx.window().request_redraw();
 
     let mut keys = KeyLogs::new();
     let mut last_frame_time = std::time::Instant::now();
-
+    let mut size = window_ctx.window().inner_size();
     let mut cursor_state = CursorIcon::Default;
 
     #[allow(deprecated)]
@@ -100,25 +99,16 @@ fn main() -> Result<()> {
         *control_flow = ControlFlow::Poll;
         match event {
             Event::WindowEvent {
-                event: winit::event::WindowEvent::CloseRequested,
+                event: WindowEvent::CloseRequested,
                 ..
-            } => *control_flow = winit::event_loop::ControlFlow::Exit,
+            } => *control_flow = ControlFlow::Exit,
             Event::WindowEvent {
-                event: winit::event::WindowEvent::Resized(new_size),
+                event: WindowEvent::Resized(new_size),
                 ..
             } => {
+                window_ctx.resize(new_size);
                 size = new_size;
-
-                swap_chain = device.create_swap_chain(
-                    &surface,
-                    &wgpu::SwapChainDescriptor {
-                        usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
-                        format: render_format,
-                        width: size.width,
-                        height: size.height,
-                        present_mode: wgpu::PresentMode::Mailbox,
-                    },
-                );
+                window_ctx.update_gfx(&mut main_color, &mut main_depth);
             }
             // Event::WindowEvent {
             //     event: winit::event::WindowEvent::CursorMoved { position: pos, .. },
@@ -130,24 +120,24 @@ fn main() -> Result<()> {
             // }
             Event::WindowEvent {
                 event:
-                    winit::event::WindowEvent::MouseInput {
+                    WindowEvent::MouseInput {
                         state: ElementState::Pressed,
                         ..
                     },
                 ..
             } => {
-                window.set_cursor_icon(CursorIcon::Move);
+                window_ctx.window().set_cursor_icon(CursorIcon::Move);
                 cursor_state = CursorIcon::Move;
             }
             Event::WindowEvent {
                 event:
-                    winit::event::WindowEvent::MouseInput {
+                    WindowEvent::MouseInput {
                         state: ElementState::Released,
                         ..
                     },
                 ..
             } => {
-                window.set_cursor_icon(CursorIcon::Default);
+                window_ctx.window().set_cursor_icon(CursorIcon::Default);
                 cursor_state = CursorIcon::Default;
             }
             Event::DeviceEvent {
@@ -155,11 +145,13 @@ fn main() -> Result<()> {
                 ..
             } => {
                 if cursor_state == CursorIcon::Move {
-                    let p = window.outer_position().unwrap();
-                    window.set_outer_position(winit::dpi::PhysicalPosition::new(
-                        p.x + delta.0 as i32,
-                        p.y + delta.1 as i32,
-                    ));
+                    let p = window_ctx.window().outer_position().unwrap();
+                    window_ctx
+                        .window()
+                        .set_outer_position(glutin::dpi::PhysicalPosition::new(
+                            p.x + delta.0 as i32,
+                            p.y + delta.1 as i32,
+                        ));
                 }
             }
             Event::DeviceEvent {
@@ -176,11 +168,14 @@ fn main() -> Result<()> {
                 let conv_key = key_converter::convert(key, modifiers_state);
                 if !conv_key.is_empty() {
                     keys.push(format!("{}", conv_key));
-                    window.request_redraw();
+                    window_ctx.window().request_redraw();
                 }
             }
             Event::MainEventsCleared => {}
             Event::RedrawRequested { .. } => {
+                encoder.clear(&main_color, [0.0, 0.0, 0.0, 0.0]);
+                encoder.clear_depth(&main_depth, 1.0);
+
                 glyph_brush.queue(Section {
                     screen_position: (250.0, 120.0),
                     bounds: (size.width as f32, size.height as f32),
@@ -190,10 +185,10 @@ fn main() -> Result<()> {
                         .map(|x| {
                             vec![
                                 Text::new(&x)
-                                    .with_color([1.0, 1.0, 1.0, 0.1])
+                                    .with_color([1.0, 1.0, 1.0, 0.5])
                                     .with_scale(30.0),
                                 Text::new("\n")
-                                    .with_color([1.0, 1.0, 1.0, 0.1])
+                                    .with_color([1.0, 1.0, 1.0, 0.5])
                                     .with_scale(30.0),
                             ]
                         })
@@ -204,46 +199,24 @@ fn main() -> Result<()> {
                         .v_align(VerticalAlign::Bottom),
                     ..Section::default()
                 });
-                // Get a command encoder for the current frame
-                let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Redraw"),
-                });
 
-                // Get the next frame
-                let frame = swap_chain.get_next_texture().expect("Get next frame");
-
-                // Clear frame
-                {
-                    let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                        color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                            attachment: &frame.view,
-                            resolve_target: None,
-                            load_op: wgpu::LoadOp::Clear,
-                            store_op: wgpu::StoreOp::Store,
-                            clear_color: wgpu::Color {
-                                r: 0.1,
-                                g: 0.1,
-                                b: 0.1,
-                                a: 0.0,
-                            },
-                        }],
-                        depth_stencil_attachment: None,
-                    });
-                }
-
-                // Draw the text!
                 glyph_brush
-                    .draw_queued(&device, &mut encoder, &frame.view, size.width, size.height)
-                    .expect("Draw queued");
+                    .use_queue()
+                    // Enable depth testing with default less-equal drawing and update the depth buffer
+                    .depth_target(&main_depth)
+                    .draw(&mut encoder, &main_color)
+                    .unwrap();
 
-                queue.submit(&[encoder.finish()]);
+                encoder.flush(&mut device);
+                window_ctx.swap_buffers().unwrap();
+                device.cleanup();
 
                 last_frame_time = std::time::Instant::now();
             }
             _ => (),
         }
         if std::time::Instant::now() - last_frame_time >= std::time::Duration::from_secs(1) {
-            window.request_redraw();
+            window_ctx.window().request_redraw();
         }
     });
 }

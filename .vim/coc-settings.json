@@ -1,6 +1,12 @@
 {
   "cSpell.words": [
+    "Srgba",
+    "conv",
     "datetime",
-    "wgpu"
+    "glutin",
+    "keylogs",
+    "vblank",
+    "wgpu",
+    "winit"
   ]
 }
