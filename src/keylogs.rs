@@ -51,6 +51,7 @@ impl KeyLogs {
         });
     }
 
+    #[warn(dead_code)]
     pub fn get_keys(&mut self) -> Vec<String> {
         self.refresh();
         self.keylogs.iter().map(|k| k.key.clone()).collect()
