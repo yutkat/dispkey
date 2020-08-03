@@ -1,5 +1,5 @@
-use winit::event::ModifiersState;
-use winit::event::VirtualKeyCode;
+use glutin::event::ModifiersState;
+use glutin::event::VirtualKeyCode;
 
 #[rustfmt::skip]
 pub fn convert(key: VirtualKeyCode, modifier: ModifiersState) -> String {
