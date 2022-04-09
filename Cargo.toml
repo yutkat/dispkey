@@ -1,7 +1,7 @@
 [package]
 name = "dispkey"
 version = "0.1.0"
-authors = ["Yuta Katayama <katayama@axelspace.com>"]
+authors = ["Yuta Katayama <8683947+yutkat@users.noreply.github.com>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
