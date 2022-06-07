@@ -12,7 +12,7 @@ struct KeyLog {
 }
 
 impl KeyLogs {
-    pub fn new() -> Self {
+        pub fn new() -> Self {
         KeyLogs {
             keylogs: Vec::<KeyLog>::new(),
         }

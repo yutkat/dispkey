@@ -2,20 +2,20 @@
 name = "dispkey"
 version = "0.1.0"
 authors = ["Yuta Katayama <8683947+yutkat@users.noreply.github.com>"]
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-log = "0.4.0"
+log = "0.4.17"
 pretty_env_logger = "0.4.0"
 gfx = "0.18"
 gfx_glyph = "0.17.0"
 old_school_gfx_glutin_ext = "0.24"
 glutin = "0.24"
-futures = "0.3"
-anyhow = "1.0.31"
-chrono = "0.4.11"
-time = "0.2.16"
+futures = "0.3.21"
+anyhow = "1.0.57"
+chrono = "0.4.19"
+time = "0.3.9"
 clap =  {version = "2", features = ["yaml"]}
 spin_sleep = "1"
